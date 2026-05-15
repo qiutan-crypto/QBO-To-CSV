@@ -208,18 +208,21 @@ function parseQBO(text) {
   const ofxStart = text.indexOf('<OFX>');
   const xmlStr = ofxStart >= 0 ? text.slice(ofxStart) : text;
 
+  // Escape bare & characters that would break XML parsing
+  let fixed = xmlStr.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#)/g, '&amp;');
+
   // Fix unclosed SGML tags (OFX 1.x uses SGML, not XML)
   const knownLeaf = [
     'TRNTYPE','DTPOSTED','TRNAMT','FITID','NAME','MEMO','CHECKNUM',
     'ACCTID','BANKID','ACCTTYPE','CURDEF','DTSTART','DTEND',
     'CODE','SEVERITY','DTSERVER','LANGUAGE','DTACCTUP','ORG','FID',
-    'INTU.BID','INTU.USERID','LEDGERBAL','AVAILBAL','BALAMT','DTASOF',
-    'TRNUID','MKTGINFO','CCACCTFROM'
+    'INTU.BID','INTU.USERID','BALAMT','DTASOF',
+    'TRNUID','MKTGINFO'
   ];
-  let fixed = xmlStr;
   knownLeaf.forEach(tag => {
-    // Only add closing tag when next tag is NOT already </TAG>
-    const re = new RegExp(`<${tag}>([^<]*)(?=\\s*<(?!\\/${tag}>))`, 'g');
+    // Escape dots for regex matching, but use original tag name in replacement
+    const reTag = tag.replace(/\./g, '\\.');
+    const re = new RegExp(`<${reTag}>([^<]*)(?=\\s*<(?!\\/${reTag}>))`, 'g');
     fixed = fixed.replace(re, `<${tag}>$1</${tag}>`);
   });
 
@@ -229,6 +232,8 @@ function parseQBO(text) {
   } catch(e) {
     throw new Error('XML parse failed: ' + e.message);
   }
+  const parseErr = doc.querySelector('parsererror');
+  if (parseErr) throw new Error('XML parse failed: ' + parseErr.textContent.substring(0, 200));
 
   // Account ID
   let acctId = '';
